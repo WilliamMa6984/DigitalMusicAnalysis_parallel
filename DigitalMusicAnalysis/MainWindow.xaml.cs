@@ -363,10 +363,16 @@ namespace DigitalMusicAnalysis
             {
                 int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
                 twiddles_arr[mm] = new Complex[nearest];
-                Parallel.For(0, nearest, ll =>
+
+                Parallel.For(0, Environment.ProcessorCount, workerId =>
                 {
-                    double a = 2 * pi * ll / (double)nearest;
-                    twiddles_arr[mm][ll] = Complex.Pow(Complex.Exp(-i), (float)a);
+                    int start = nearest * workerId / Environment.ProcessorCount;
+                    int end = nearest * (workerId + 1) / Environment.ProcessorCount;
+                    for (int ll = start; ll < end; ll++)
+                    {
+                        double a = 2 * pi * ll / (double)nearest;
+                        twiddles_arr[mm][ll] = Complex.Pow(Complex.Exp(-i), (float)a);
+                    }
                 });
 
                 compX[mm] = new Complex[nearest];
@@ -382,13 +388,17 @@ namespace DigitalMusicAnalysis
                     }
                 }
             }
-
-            Parallel.For(0, lengths.Count, mm =>
+            Parallel.For(0, Environment.ProcessorCount, workerId =>
             {
-                int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
-                Y[mm] = new Complex[nearest];
+                int start = lengths.Count * workerId / Environment.ProcessorCount;
+                int end = lengths.Count * (workerId + 1) / Environment.ProcessorCount;
+                for (int mm = start; mm < end; mm++)
+                {
+                    int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
+                    Y[mm] = new Complex[nearest];
 
-                Y[mm] = fft(compX[mm], nearest, mm);
+                    Y[mm] = fft(compX[mm], nearest, mm);
+                }
             });
 
 
