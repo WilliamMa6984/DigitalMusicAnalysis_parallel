@@ -13,6 +13,7 @@ using NAudio.Wave;
 using System.Xml;
 using System.Threading.Tasks;
 using System.Diagnostics;
+using System.Text;
 
 namespace DigitalMusicAnalysis
 {
@@ -637,7 +638,19 @@ namespace DigitalMusicAnalysis
                 noteStaff.Children.Insert(ii, timeRect[ii]);
             }
 
+            /* Write output to file */
+            WriteOutput(alignedStaffArray, alignedNoteArray);
+        }
 
+        private async void WriteOutput(musicNote[] alignedStaffArray, musicNote[] alignedNoteArray)
+        {
+            StringBuilder sb = new StringBuilder();
+            for (int ii = 0; ii < alignedStaffArray.Length; ii++)
+            {
+                sb.Append(alignedStaffArray[ii].ToString());
+                sb.Append(alignedNoteArray[ii].ToString());
+            }
+            await File.WriteAllTextAsync("output.txt", sb.ToString());
         }
 
         private void DisplayStats(object sender, System.Windows.Input.MouseEventArgs e)

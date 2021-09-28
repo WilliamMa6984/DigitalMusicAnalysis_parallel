@@ -89,6 +89,11 @@ namespace DigitalMusicAnalysis
                     break;
             }
         }
+
+        public override string ToString()
+        {
+            return "{p:" + pitch + ",d:" + duration + ",fl:" + flat + ",e:" + error + ",s:" + staffPos + ",m:" + mult + ",fr:" + frequency + "}";
+        }
     }
 
     
