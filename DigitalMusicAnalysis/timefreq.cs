@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Numerics;
 using System.Threading.Tasks;
 
@@ -87,7 +88,7 @@ namespace DigitalMusicAnalysis
 				}
 			}
 
-
+			DateTime start = DateTime.Now;
 			Parallel.For(0, Environment.ProcessorCount, workerId =>
 			{
 				int start = max * workerId / Environment.ProcessorCount;
@@ -97,6 +98,7 @@ namespace DigitalMusicAnalysis
 					tempFFT[i] = fft(temp[i]);
 				}
 			});
+			Trace.WriteLine("timefreq.stft fftLoop: " + (DateTime.Now - start).ToString());
 
 			for (ii = 0; ii < max; ii++)
 			{
