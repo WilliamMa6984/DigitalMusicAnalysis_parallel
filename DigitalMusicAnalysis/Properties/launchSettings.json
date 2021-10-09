@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "DigitalMusicAnalysis": {
+      "commandName": "Project",
+      "remoteDebugEnabled": false
+    }
+  }
+}
