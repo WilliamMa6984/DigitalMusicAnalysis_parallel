@@ -2,9 +2,6 @@
   "profiles": {
     "DigitalMusicAnalysis": {
       "commandName": "Project",
-      "environmentVariables": {
-        "ProcessorCount": "1"
-      },
       "remoteDebugEnabled": false
     }
   }
