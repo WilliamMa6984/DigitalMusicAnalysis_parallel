@@ -276,17 +276,18 @@ namespace DigitalMusicAnalysis
 
 		// Onset Detection function - Determines Start and Finish times of a note and the frequency of the note over each duration.
 
-        private void onsetDetection()
-        {
-            float[] HFC;
-            int starts = 0;
-            int stops = 0;
-            Complex[][] Y;
-            Complex[][] compX;
-            List<int> lengths;
-            List<int> noteStarts;
-            List<int> noteStops;
-            List<double> pitches;
+		private void onsetDetection()
+		{
+			float[] HFC;
+			int starts = 0;
+			int stops = 0;
+			Complex[][] Y;
+			Complex[][] compX;
+			double[] absY;
+			List<int> lengths;
+			List<int> noteStarts;
+			List<int> noteStops;
+			List<double> pitches;
 
 			double pi = 3.14159265;
 			Complex i = Complex.ImaginaryOne;
@@ -367,7 +368,7 @@ namespace DigitalMusicAnalysis
 			{
 				if (starts > stops)
 				{
-					if (HFC[jj] < 0.263525)
+					if (HFC[jj] < 0.001)
 					{
 						noteStops.Add(jj * ((stftRep.wSamp - 1) / 2));
 						stops = stops + 1;
@@ -375,7 +376,7 @@ namespace DigitalMusicAnalysis
 				}
 				else if (starts - stops == 0)
 				{
-					if (HFC[jj] > 0.263525)
+					if (HFC[jj] > 0.001)
 					{
 						noteStarts.Add(jj * ((stftRep.wSamp - 1) / 2));
 						starts = starts + 1;
@@ -399,95 +400,96 @@ namespace DigitalMusicAnalysis
 				lengths.Add(noteStops[ii] - noteStarts[ii]);
 			}
 
-            DateTime start = DateTime.Now;
-            compX = new Complex[lengths.Count][];
-            Y = new Complex[lengths.Count][];
-            twiddles_arr = new Complex[lengths.Count][];
+			
+			DateTime start = DateTime.Now;
+			compX = new Complex[lengths.Count][];
+			Y = new Complex[lengths.Count][];
+			twiddles_arr = new Complex[lengths.Count][];
 
-            double[] maximum_Arr = new double[lengths.Count];
-            int[] maxInd_Arr = new int[lengths.Count];
-            Parallel.For(0, Environment.ProcessorCount, workerId =>
-            {
-                int start = lengths.Count * workerId / Environment.ProcessorCount;
-                int end = lengths.Count * (workerId + 1) / Environment.ProcessorCount;
-                for (int mm = start; mm < end; mm++)
-                {
-                    int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
-                    twiddles_arr[mm] = new Complex[nearest];
+			double[] maximum_Arr = new double[lengths.Count];
+			int[] maxInd_Arr = new int[lengths.Count];
+			Parallel.For(0, Environment.ProcessorCount, workerId =>
+			{
+				int start = lengths.Count * workerId / Environment.ProcessorCount;
+				int end = lengths.Count * (workerId + 1) / Environment.ProcessorCount;
+				for (int mm = start; mm < end; mm++)
+				{
+					int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
+					twiddles_arr[mm] = new Complex[nearest];
 
-                    for (int ll = 0; ll < nearest; ll++)
-                    {
-                        double a = 2 * pi * ll / (double)nearest;
-                        twiddles_arr[mm][ll] = Complex.Pow(Complex.Exp(-i), (float)a);
-                    }
+					for (int ll = 0; ll < nearest; ll++)
+					{
+						double a = 2 * pi * ll / (double)nearest;
+						twiddles_arr[mm][ll] = Complex.Pow(Complex.Exp(-i), (float)a);
+					}
 
-                    compX[mm] = new Complex[nearest];
-                    for (int kk = 0; kk < nearest; kk++)
-                    {
-                        if (kk < lengths[mm] && (noteStarts[mm] + kk) < waveIn.wave.Length)
-                        {
-                            compX[mm][kk] = waveIn.wave[noteStarts[mm] + kk];
-                        }
-                        else
-                        {
-                            compX[mm][kk] = Complex.Zero;
-                        }
-                    }
+					compX[mm] = new Complex[nearest];
+					for (int kk = 0; kk < nearest; kk++)
+					{
+						if (kk < lengths[mm] && (noteStarts[mm] + kk) < waveIn.wave.Length)
+						{
+							compX[mm][kk] = waveIn.wave[noteStarts[mm] + kk];
+						}
+						else
+						{
+							compX[mm][kk] = Complex.Zero;
+						}
+					}
 
-                    Y[mm] = new Complex[nearest];
+					Y[mm] = new Complex[nearest];
 
-                    Y[mm] = fft(compX[mm], nearest, mm);
+					Y[mm] = fft(compX[mm], nearest, mm);
 
-                    double[] absY = new double[nearest];
+					double[] absY = new double[nearest];
 
-                    maximum_Arr[mm] = 0;
-                    maxInd_Arr[mm] = 0;
+					maximum_Arr[mm] = 0;
+					maxInd_Arr[mm] = 0;
 
-                    for (int jj = 0; jj < Y[mm].Length; jj++)
-                    {
-                        absY[jj] = Y[mm][jj].Magnitude;
-                        if (absY[jj] > maximum_Arr[mm])
-                        {
-                            maximum_Arr[mm] = absY[jj];
-                            maxInd_Arr[mm] = jj;
-                        }
-                    }
+					for (int jj = 0; jj < Y[mm].Length; jj++)
+					{
+						absY[jj] = Y[mm][jj].Magnitude;
+						if (absY[jj] > maximum_Arr[mm])
+						{
+							maximum_Arr[mm] = absY[jj];
+							maxInd_Arr[mm] = jj;
+						}
+					}
 
-                    for (int div = 6; div > 1; div--)
-                    {
+					for (int div = 6; div > 1; div--)
+					{
 
-                        if (maxInd_Arr[mm] > nearest / 2)
-                        {
-                            if (absY[(int)Math.Floor((double)(nearest - maxInd_Arr[mm]) / div)] / absY[(maxInd_Arr[mm])] > 0.10)
-                            {
-                                maxInd_Arr[mm] = (nearest - maxInd_Arr[mm]) / div;
-                            }
-                        }
-                        else
-                        {
-                            if (absY[(int)Math.Floor((double)maxInd_Arr[mm] / div)] / absY[(maxInd_Arr[mm])] > 0.10)
-                            {
-                                maxInd_Arr[mm] = maxInd_Arr[mm] / div;
-                            }
-                        }
-                    }
-                }
-            });
+						if (maxInd_Arr[mm] > nearest / 2)
+						{
+							if (absY[(int)Math.Floor((double)(nearest - maxInd_Arr[mm]) / div)] / absY[(maxInd_Arr[mm])] > 0.10)
+							{
+								maxInd_Arr[mm] = (nearest - maxInd_Arr[mm]) / div;
+							}
+						}
+						else
+						{
+							if (absY[(int)Math.Floor((double)maxInd_Arr[mm] / div)] / absY[(maxInd_Arr[mm])] > 0.10)
+							{
+								maxInd_Arr[mm] = maxInd_Arr[mm] / div;
+							}
+						}
+					}
+				}
+			});
 
-            // Implicit barrier
-            for (int mm = 0; mm < lengths.Count; mm++)
-            {
-                int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
-                if (maxInd_Arr[mm] > nearest / 2)
-                {
-                    pitches.Add((nearest - maxInd_Arr[mm]) * waveIn.SampleRate / nearest);
-                }
-                else
-                {
-                    pitches.Add(maxInd_Arr[mm] * waveIn.SampleRate / nearest);
-                }
-            }
-            Trace.WriteLine("MainWindow fft Timer: " + (DateTime.Now - start).ToString());
+			// Implicit barrier
+			for (int mm = 0; mm < lengths.Count; mm++)
+			{
+				int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
+				if (maxInd_Arr[mm] > nearest / 2)
+				{
+					pitches.Add((nearest - maxInd_Arr[mm]) * waveIn.SampleRate / nearest);
+				}
+				else
+				{
+					pitches.Add(maxInd_Arr[mm] * waveIn.SampleRate / nearest);
+				}
+			}
+			Trace.WriteLine("MainWindow fft Timer: " + (DateTime.Now - start).ToString());
 
 			musicNote[] noteArray;
 			noteArray = new musicNote[noteStarts.Count()];
@@ -497,32 +499,50 @@ namespace DigitalMusicAnalysis
 				noteArray[ii] = new musicNote(pitches[ii], lengths[ii]);
 			}
 
-			//int[] sheetPitchArray = new int[sheetmusic.Length];
+			int[] sheetPitchArray = new int[noteArray.Length];
 			int[] notePitchArray = new int[noteArray.Length];
 
-			/*for (int ii = 0; ii < sheetmusic.Length; ii++)
+			for (int ii = 0; ii < noteArray.Length; ii++)
 			{
-				sheetPitchArray[ii] = sheetmusic[ii].pitch % 12;
-			}*/
+				sheetPitchArray[ii] = noteArray[ii].pitch % 12;
+			}
 
 			for (int jj = 0; jj < noteArray.Length; jj++)
 			{
 				notePitchArray[jj] = noteArray[jj].pitch % 12;
 			}
 
-			//string[] alignedStrings = new string[2];
+			string[] alignedStrings = new string[2];
 
-			//alignedStrings = stringMatch(sheetPitchArray, notePitchArray);
+			alignedStrings = stringMatch(sheetPitchArray, notePitchArray);
 
-			musicNote[] alignedStaffArray = new musicNote[notePitchArray.Length];
-			musicNote[] alignedNoteArray = new musicNote[notePitchArray.Length];
-			//int staffCount = 0;
+			musicNote[] alignedStaffArray = new musicNote[alignedStrings[0].Length / 2];
+			musicNote[] alignedNoteArray = new musicNote[alignedStrings[1].Length / 2];
+			int staffCount = 0;
 			int noteCount = 0;
 
-			for (int ii = 0; ii < noteArray.Length; ii++)
+			for (int ii = 0; ii < alignedStrings[0].Length / 2; ii++)
 			{
-				alignedNoteArray[ii] = noteArray[noteCount];
-				noteCount++;
+
+				if (alignedStrings[0][2 * ii] == ' ')
+				{
+					alignedStaffArray[ii] = new musicNote(0, 0);
+				}
+				else
+				{
+					alignedStaffArray[ii] = noteArray[staffCount];
+					staffCount++;
+				}
+
+				if (alignedStrings[1][2 * ii] == ' ')
+				{
+					alignedNoteArray[ii] = new musicNote(0, 0);
+				}
+				else
+				{
+					alignedNoteArray[ii] = noteArray[noteCount];
+					noteCount++;
+				}
 			}
 
 			// STAFF TAB DISPLAY
