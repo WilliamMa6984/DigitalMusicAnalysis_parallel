@@ -283,7 +283,6 @@ namespace DigitalMusicAnalysis
             int stops = 0;
             Complex[][] Y;
             Complex[][] compX;
-            double[] absY;
             List<int> lengths;
             List<int> noteStarts;
             List<int> noteStops;
@@ -359,36 +358,9 @@ namespace DigitalMusicAnalysis
             compX = new Complex[lengths.Count][];
             Y = new Complex[lengths.Count][];
             twiddles_arr = new Complex[lengths.Count][];
-            for (int mm = 0; mm < lengths.Count; mm++)
-            {
-                int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
-                twiddles_arr[mm] = new Complex[nearest];
 
-                Parallel.For(0, Environment.ProcessorCount, workerId =>
-                {
-                    int start = nearest * workerId / Environment.ProcessorCount;
-                    int end = nearest * (workerId + 1) / Environment.ProcessorCount;
-                    if (nearest < start + end) end = nearest;
-                    for (int ll = start; ll < end; ll++)
-                    {
-                        double a = 2 * pi * ll / (double)nearest;
-                        twiddles_arr[mm][ll] = Complex.Pow(Complex.Exp(-i), (float)a);
-                    }
-                });
-
-                compX[mm] = new Complex[nearest];
-                for (int kk = 0; kk < nearest; kk++)
-                {
-                    if (kk < lengths[mm] && (noteStarts[mm] + kk) < waveIn.wave.Length)
-                    {
-                        compX[mm][kk] = waveIn.wave[noteStarts[mm] + kk];
-                    }
-                    else
-                    {
-                        compX[mm][kk] = Complex.Zero;
-                    }
-                }
-            }
+            double[] maximum_Arr = new double[lengths.Count];
+            int[] maxInd_Arr = new int[lengths.Count];
             Parallel.For(0, Environment.ProcessorCount, workerId =>
             {
                 int start = lengths.Count * workerId / Environment.ProcessorCount;
@@ -396,60 +368,79 @@ namespace DigitalMusicAnalysis
                 for (int mm = start; mm < end; mm++)
                 {
                     int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
+                    twiddles_arr[mm] = new Complex[nearest];
+
+                    for (int ll = 0; ll < nearest; ll++)
+                    {
+                        double a = 2 * pi * ll / (double)nearest;
+                        twiddles_arr[mm][ll] = Complex.Pow(Complex.Exp(-i), (float)a);
+                    }
+
+                    compX[mm] = new Complex[nearest];
+                    for (int kk = 0; kk < nearest; kk++)
+                    {
+                        if (kk < lengths[mm] && (noteStarts[mm] + kk) < waveIn.wave.Length)
+                        {
+                            compX[mm][kk] = waveIn.wave[noteStarts[mm] + kk];
+                        }
+                        else
+                        {
+                            compX[mm][kk] = Complex.Zero;
+                        }
+                    }
+
                     Y[mm] = new Complex[nearest];
 
                     Y[mm] = fft(compX[mm], nearest, mm);
+
+                    double[] absY = new double[nearest];
+
+                    maximum_Arr[mm] = 0;
+                    maxInd_Arr[mm] = 0;
+
+                    for (int jj = 0; jj < Y[mm].Length; jj++)
+                    {
+                        absY[jj] = Y[mm][jj].Magnitude;
+                        if (absY[jj] > maximum_Arr[mm])
+                        {
+                            maximum_Arr[mm] = absY[jj];
+                            maxInd_Arr[mm] = jj;
+                        }
+                    }
+
+                    for (int div = 6; div > 1; div--)
+                    {
+
+                        if (maxInd_Arr[mm] > nearest / 2)
+                        {
+                            if (absY[(int)Math.Floor((double)(nearest - maxInd_Arr[mm]) / div)] / absY[(maxInd_Arr[mm])] > 0.10)
+                            {
+                                maxInd_Arr[mm] = (nearest - maxInd_Arr[mm]) / div;
+                            }
+                        }
+                        else
+                        {
+                            if (absY[(int)Math.Floor((double)maxInd_Arr[mm] / div)] / absY[(maxInd_Arr[mm])] > 0.10)
+                            {
+                                maxInd_Arr[mm] = maxInd_Arr[mm] / div;
+                            }
+                        }
+                    }
                 }
             });
 
-
+            // Implicit barrier
             for (int mm = 0; mm < lengths.Count; mm++)
             {
                 int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
-                absY = new double[nearest];
-
-                double maximum = 0;
-                int maxInd = 0;
-
-                for (int jj = 0; jj < Y[mm].Length; jj++)
+                if (maxInd_Arr[mm] > nearest / 2)
                 {
-                    absY[jj] = Y[mm][jj].Magnitude;
-                    if (absY[jj] > maximum)
-                    {
-                        maximum = absY[jj];
-                        maxInd = jj;
-                    }
-                }
-
-                for (int div = 6; div > 1; div--)
-                {
-
-                    if (maxInd > nearest / 2)
-                    {
-                        if (absY[(int)Math.Floor((double)(nearest - maxInd) / div)] / absY[(maxInd)] > 0.10)
-                        {
-                            maxInd = (nearest - maxInd) / div;
-                        }
-                    }
-                    else
-                    {
-                        if (absY[(int)Math.Floor((double)maxInd / div)] / absY[(maxInd)] > 0.10)
-                        {
-                            maxInd = maxInd / div;
-                        }
-                    }
-                }
-
-                if (maxInd > nearest / 2)
-                {
-                    pitches.Add((nearest - maxInd) * waveIn.SampleRate / nearest);
+                    pitches.Add((nearest - maxInd_Arr[mm]) * waveIn.SampleRate / nearest);
                 }
                 else
                 {
-                    pitches.Add(maxInd * waveIn.SampleRate / nearest);
+                    pitches.Add(maxInd_Arr[mm] * waveIn.SampleRate / nearest);
                 }
-
-
             }
             Trace.WriteLine("MainWindow fft Timer: " + (DateTime.Now - start).ToString());
 
