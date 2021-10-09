@@ -283,7 +283,6 @@ namespace DigitalMusicAnalysis
 			int stops = 0;
 			Complex[][] Y;
 			Complex[][] compX;
-			double[] absY;
 			List<int> lengths;
 			List<int> noteStarts;
 			List<int> noteStops;
