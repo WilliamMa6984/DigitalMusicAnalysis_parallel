@@ -26,6 +26,7 @@ namespace DigitalMusicAnalysis
         private WaveOut playback; // = new WaveOut();
         private Complex[][] twiddles_arr;
         private string filename;
+        public static int DoP = 8;
         private enum pitchConv { C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B };
         private double bpm = 70;
 
@@ -35,12 +36,17 @@ namespace DigitalMusicAnalysis
             filename = openFile("Select Audio (wav) file");
             string xmlfile = openFile("Select Score (xml) file");
             Thread check = new Thread(new ThreadStart(updateSlider));
-            loadWave(filename);
-            freqDomain();
-            sheetmusic = readXML(xmlfile);
-            onsetDetection();
-            loadImage();
-            loadHistogram();
+            for (int i = 0; i < 20; i++)
+            {
+                DateTime start = DateTime.Now;
+                loadWave(filename);
+                freqDomain();
+                sheetmusic = readXML(xmlfile);
+                onsetDetection();
+                loadImage();
+                loadHistogram();
+                Trace.WriteLine((DateTime.Now - start).TotalSeconds);
+            }
             playBack();
             check.Start();
 
@@ -281,8 +287,6 @@ namespace DigitalMusicAnalysis
             float[] HFC;
             int starts = 0;
             int stops = 0;
-            Complex[][] Y;
-            Complex[][] compX;
             List<int> lengths;
             List<int> noteStarts;
             List<int> noteStops;
@@ -302,14 +306,20 @@ namespace DigitalMusicAnalysis
 
             HFC = new float[stftRep.timeFreqData[0].Length];
 
-            for (int jj = 0; jj < stftRep.timeFreqData[0].Length; jj++)
+            // Parallelise potential
+            Parallel.For(0, Environment.ProcessorCount, new ParallelOptions { MaxDegreeOfParallelism = DoP }, workerId =>
             {
-                for (int ii = 0; ii < stftRep.wSamp / 2; ii++)
+                int start = stftRep.timeFreqData[0].Length * workerId / Environment.ProcessorCount;
+                int end = stftRep.timeFreqData[0].Length * (workerId + 1) / Environment.ProcessorCount;
+                for (int jj = start; jj < end; jj++)
                 {
-                    HFC[jj] = HFC[jj] + (float)Math.Pow((double)stftRep.timeFreqData[ii][jj] * ii, 2);
-                }
+                    for (int ii = 0; ii < stftRep.wSamp / 2; ii++)
+                    {
+                        HFC[jj] = HFC[jj] + (float)Math.Pow((double)stftRep.timeFreqData[ii][jj] * ii, 2);
+                    }
 
-            }
+                }
+            });
 
             float maxi = HFC.Max();
 
@@ -354,14 +364,12 @@ namespace DigitalMusicAnalysis
                 lengths.Add(noteStops[ii] - noteStarts[ii]);
             }
 
-            DateTime start = DateTime.Now;
-            compX = new Complex[lengths.Count][];
-            Y = new Complex[lengths.Count][];
+            //DateTime start = DateTime.Now;
             twiddles_arr = new Complex[lengths.Count][];
 
             double[] maximum_Arr = new double[lengths.Count];
             int[] maxInd_Arr = new int[lengths.Count];
-            Parallel.For(0, Environment.ProcessorCount, workerId =>
+            Parallel.For(0, Environment.ProcessorCount, new ParallelOptions { MaxDegreeOfParallelism = DoP }, workerId =>
             {
                 int start = lengths.Count * workerId / Environment.ProcessorCount;
                 int end = lengths.Count * (workerId + 1) / Environment.ProcessorCount;
@@ -372,35 +380,46 @@ namespace DigitalMusicAnalysis
 
                     for (int ll = 0; ll < nearest; ll++)
                     {
+                        // Vector potential
                         double a = 2 * pi * ll / (double)nearest;
                         twiddles_arr[mm][ll] = Complex.Pow(Complex.Exp(-i), (float)a);
                     }
+                }
+            });
 
-                    compX[mm] = new Complex[nearest];
+
+            Parallel.For(0, Environment.ProcessorCount, new ParallelOptions { MaxDegreeOfParallelism = DoP }, workerId =>
+            {
+                int start = lengths.Count * workerId / Environment.ProcessorCount;
+                int end = lengths.Count * (workerId + 1) / Environment.ProcessorCount;
+                for (int mm = start; mm < end; mm++)
+                {
+                    int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
+                    Complex[] compX = new Complex[nearest];
+                    Complex[] Y = new Complex[nearest];
+
                     for (int kk = 0; kk < nearest; kk++)
                     {
                         if (kk < lengths[mm] && (noteStarts[mm] + kk) < waveIn.wave.Length)
                         {
-                            compX[mm][kk] = waveIn.wave[noteStarts[mm] + kk];
+                            compX[kk] = waveIn.wave[noteStarts[mm] + kk];
                         }
                         else
                         {
-                            compX[mm][kk] = Complex.Zero;
+                            compX[kk] = Complex.Zero;
                         }
                     }
 
-                    Y[mm] = new Complex[nearest];
-
-                    Y[mm] = fft(compX[mm], nearest, mm);
+                    Y = fft(compX, nearest, mm);
 
                     double[] absY = new double[nearest];
 
                     maximum_Arr[mm] = 0;
                     maxInd_Arr[mm] = 0;
 
-                    for (int jj = 0; jj < Y[mm].Length; jj++)
+                    for (int jj = 0; jj < Y.Length; jj++)
                     {
-                        absY[jj] = Y[mm][jj].Magnitude;
+                        absY[jj] = Y[jj].Magnitude;
                         if (absY[jj] > maximum_Arr[mm])
                         {
                             maximum_Arr[mm] = absY[jj];
@@ -442,7 +461,7 @@ namespace DigitalMusicAnalysis
                     pitches.Add(maxInd_Arr[mm] * waveIn.SampleRate / nearest);
                 }
             }
-            Trace.WriteLine("MainWindow fft Timer: " + (DateTime.Now - start).ToString());
+            //Trace.WriteLine("MainWindow fft Timer: " + (DateTime.Now - start).ToString());
 
             musicNote[] noteArray;
             noteArray = new musicNote[noteStarts.Count()];
@@ -748,8 +767,6 @@ namespace DigitalMusicAnalysis
             else
             {
 
-                Complex[] E = new Complex[N / 2];
-                Complex[] O = new Complex[N / 2];
                 Complex[] even = new Complex[N / 2];
                 Complex[] odd = new Complex[N / 2];
 
@@ -766,8 +783,8 @@ namespace DigitalMusicAnalysis
                     }
                 }
 
-                E = fft(even, L, mm);
-                O = fft(odd, L, mm);
+                Complex[] E = fft(even, L, mm);
+                Complex[] O = fft(odd, L, mm);
 
                 for (kk = 0; kk < N; kk++)
                 {
