@@ -73,11 +73,11 @@ namespace DigitalMusicAnalysis
 			int max = (int)(2 * Math.Floor((double)N / (double)wSamp) - 1);
 			Complex[][] tempFFT = new Complex[max][];
 
-			Parallel.For(0, Environment.ProcessorCount, new ParallelOptions { MaxDegreeOfParallelism = MainWindow.DoP }, workerId =>
+			Parallel.For(0, MainWindow.DoP, new ParallelOptions { MaxDegreeOfParallelism = MainWindow.DoP }, workerId =>
 			{
-				//int start = max * workerId / Environment.ProcessorCount;
-				//int end = max * (workerId + 1) / Environment.ProcessorCount;
-				for (int i = workerId; i < max; i += Environment.ProcessorCount)
+				//int start = max * workerId / MainWindow.DoP;
+				//int end = max * (workerId + 1) / MainWindow.DoP;
+				for (int i = workerId; i < max; i += MainWindow.DoP)
 				{
 					Complex[] temp = new Complex[wSamp];
 

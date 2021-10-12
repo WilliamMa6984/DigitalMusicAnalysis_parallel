@@ -26,9 +26,10 @@ namespace DigitalMusicAnalysis
         private WaveOut playback; // = new WaveOut();
         private Complex[][] twiddles_arr;
         private string filename;
-        public static int DoP = 8;
         private enum pitchConv { C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B };
         private double bpm = 70;
+
+        public static int DoP = Environment.ProcessorCount;
 
         public MainWindow()
         {
@@ -306,11 +307,10 @@ namespace DigitalMusicAnalysis
 
             HFC = new float[stftRep.timeFreqData[0].Length];
 
-            // Parallelise potential
-            Parallel.For(0, Environment.ProcessorCount, new ParallelOptions { MaxDegreeOfParallelism = DoP }, workerId =>
+            Parallel.For(0, DoP, new ParallelOptions { MaxDegreeOfParallelism = DoP }, workerId =>
             {
-                int start = stftRep.timeFreqData[0].Length * workerId / Environment.ProcessorCount;
-                int end = stftRep.timeFreqData[0].Length * (workerId + 1) / Environment.ProcessorCount;
+                int start = stftRep.timeFreqData[0].Length * workerId / DoP;
+                int end = stftRep.timeFreqData[0].Length * (workerId + 1) / DoP;
                 for (int jj = start; jj < end; jj++)
                 {
                     for (int ii = 0; ii < stftRep.wSamp / 2; ii++)
@@ -369,10 +369,10 @@ namespace DigitalMusicAnalysis
 
             double[] maximum_Arr = new double[lengths.Count];
             int[] maxInd_Arr = new int[lengths.Count];
-            Parallel.For(0, Environment.ProcessorCount, new ParallelOptions { MaxDegreeOfParallelism = DoP }, workerId =>
+            Parallel.For(0, DoP, new ParallelOptions { MaxDegreeOfParallelism = DoP }, workerId =>
             {
-                int start = lengths.Count * workerId / Environment.ProcessorCount;
-                int end = lengths.Count * (workerId + 1) / Environment.ProcessorCount;
+                int start = lengths.Count * workerId / DoP;
+                int end = lengths.Count * (workerId + 1) / DoP;
                 for (int mm = start; mm < end; mm++)
                 {
                     int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
@@ -388,11 +388,11 @@ namespace DigitalMusicAnalysis
             });
 
 
-            Parallel.For(0, Environment.ProcessorCount, new ParallelOptions { MaxDegreeOfParallelism = DoP }, workerId =>
+            Parallel.For(0, DoP, new ParallelOptions { MaxDegreeOfParallelism = DoP }, workerId =>
             {
-                int start = lengths.Count * workerId / Environment.ProcessorCount;
-                int end = lengths.Count * (workerId + 1) / Environment.ProcessorCount;
-                for (int mm = start; mm < end; mm++)
+                //int start = lengths.Count * workerId / DoP;
+                //int end = lengths.Count * (workerId + 1) / DoP;
+                for (int mm = workerId; mm < lengths.Count; mm += DoP)
                 {
                     int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
                     Complex[] compX = new Complex[nearest];
