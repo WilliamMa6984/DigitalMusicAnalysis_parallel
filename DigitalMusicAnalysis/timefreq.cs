@@ -57,7 +57,6 @@ namespace DigitalMusicAnalysis
 		float[][] stft(Complex[] x, int wSamp)
 		{
 			int ii = 0;
-			int jj = 0;
 			int kk = 0;
 			int ll = 0;
 			int N = x.Length;
@@ -70,35 +69,38 @@ namespace DigitalMusicAnalysis
 				Y[ll] = new float[2 * (int)Math.Floor((double)N / (double)wSamp)];
 			}
 
+			//DateTime start = DateTime.Now;
 			int max = (int)(2 * Math.Floor((double)N / (double)wSamp) - 1);
-			Complex[][] temp = new Complex[max][];
 			Complex[][] tempFFT = new Complex[max][];
-			for (int i = 0; i < max; i++)
-			{
-				temp[i] = new Complex[wSamp];
-				tempFFT[i] = new Complex[wSamp];
-			}
 
-			for (ii = 0; ii < max; ii++)
-			{
+			Task[] tasks = new Task[MainWindow.DoP];
+			//Parallel.For(0, max, new ParallelOptions { MaxDegreeOfParallelism = MainWindow.DoP }, i =>
+			//{
 
-				for (jj = 0; jj < wSamp; jj++)
+			for (int id = 0; id < MainWindow.DoP; id++)
+			{
+				//int start = max * workerId / MainWindow.DoP;
+				//int end = max * (workerId + 1) / MainWindow.DoP;
+				int workerId = id;
+
+				tasks[workerId] = Task.Factory.StartNew(() =>
 				{
-					temp[ii][jj] = x[ii * (wSamp / 2) + jj];
-				}
-			}
+					for (int i = workerId; i < max; i += MainWindow.DoP)
+					{
+						Complex[] temp = new Complex[wSamp];
 
-			DateTime start = DateTime.Now;
-			Parallel.For(0, Environment.ProcessorCount, workerId =>
-			{
-				int start = max * workerId / Environment.ProcessorCount;
-				int end = max * (workerId + 1) / Environment.ProcessorCount;
-				for (int i = start; i < end; i++)
-				{
-					tempFFT[i] = fft(temp[i]);
-				}
-			});
-			Trace.WriteLine("timefreq.stft fftLoop: " + (DateTime.Now - start).ToString());
+						for (int j = 0; j < wSamp; j++)
+						{
+							temp[j] = x[i * (wSamp / 2) + j];
+						}
+
+						tempFFT[i] = new Complex[wSamp];
+						tempFFT[i] = fft(temp);
+					}
+				});
+			}
+			Task.WaitAll(tasks);
+			//Trace.WriteLine("timefreq.stft fftLoop: " + (DateTime.Now - start).ToString());
 
 			for (ii = 0; ii < max; ii++)
 			{
@@ -141,8 +143,6 @@ namespace DigitalMusicAnalysis
 			}
 			else{
 
-				Complex[] E = new Complex[N/2];
-				Complex[] O = new Complex[N/2];
 				Complex[] even = new Complex[N/2];
 				Complex[] odd = new Complex[N/2];
 
@@ -159,8 +159,8 @@ namespace DigitalMusicAnalysis
 					}
 				}
 
-				E = fft(even);
-				O = fft(odd);
+				Complex[] E = fft(even);
+				Complex[] O = fft(odd);
 
 				for (kk = 0; kk < N; kk++)
 				{
