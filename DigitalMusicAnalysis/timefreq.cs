@@ -73,23 +73,33 @@ namespace DigitalMusicAnalysis
 			int max = (int)(2 * Math.Floor((double)N / (double)wSamp) - 1);
 			Complex[][] tempFFT = new Complex[max][];
 
-			Parallel.For(0, MainWindow.DoP, new ParallelOptions { MaxDegreeOfParallelism = MainWindow.DoP }, workerId =>
+			Task[] tasks = new Task[MainWindow.DoP];
+			//Parallel.For(0, max, new ParallelOptions { MaxDegreeOfParallelism = MainWindow.DoP }, i =>
+			//{
+
+			for (int id = 0; id < MainWindow.DoP; id++)
 			{
 				//int start = max * workerId / MainWindow.DoP;
 				//int end = max * (workerId + 1) / MainWindow.DoP;
-				for (int i = workerId; i < max; i += MainWindow.DoP)
+				int workerId = id;
+
+				tasks[workerId] = Task.Factory.StartNew(() =>
 				{
-					Complex[] temp = new Complex[wSamp];
-
-					for (int j = 0; j < wSamp; j++)
+					for (int i = workerId; i < max; i += MainWindow.DoP)
 					{
-						temp[j] = x[i * (wSamp / 2) + j];
-					}
+						Complex[] temp = new Complex[wSamp];
 
-					tempFFT[i] = new Complex[wSamp];
-					tempFFT[i] = fft(temp);
-				}
-			});
+						for (int j = 0; j < wSamp; j++)
+						{
+							temp[j] = x[i * (wSamp / 2) + j];
+						}
+
+						tempFFT[i] = new Complex[wSamp];
+						tempFFT[i] = fft(temp);
+					}
+				});
+			}
+			Task.WaitAll(tasks);
 			//Trace.WriteLine("timefreq.stft fftLoop: " + (DateTime.Now - start).ToString());
 
 			for (ii = 0; ii < max; ii++)

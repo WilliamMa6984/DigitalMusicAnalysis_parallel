@@ -29,7 +29,7 @@ namespace DigitalMusicAnalysis
         private enum pitchConv { C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B };
         private double bpm = 70;
 
-        public static int DoP = Environment.ProcessorCount;
+        public static int DoP = Environment.ProcessorCount/2;
 
         public MainWindow()
         {
@@ -307,19 +307,26 @@ namespace DigitalMusicAnalysis
 
             HFC = new float[stftRep.timeFreqData[0].Length];
 
-            Parallel.For(0, DoP, new ParallelOptions { MaxDegreeOfParallelism = DoP }, workerId =>
+            Task[] tasks = new Task[DoP];
+            //Parallel.For(0, stftRep.timeFreqData[0].Length, new ParallelOptions { MaxDegreeOfParallelism = DoP }, jj =>
+            //{
+            for (int workerId = 0; workerId < DoP; workerId++)
             {
                 int start = stftRep.timeFreqData[0].Length * workerId / DoP;
                 int end = stftRep.timeFreqData[0].Length * (workerId + 1) / DoP;
-                for (int jj = start; jj < end; jj++)
-                {
-                    for (int ii = 0; ii < stftRep.wSamp / 2; ii++)
-                    {
-                        HFC[jj] = HFC[jj] + (float)Math.Pow((double)stftRep.timeFreqData[ii][jj] * ii, 2);
-                    }
 
-                }
-            });
+                tasks[workerId] = Task.Factory.StartNew(() =>
+                {
+                    for (int jj = start; jj < end; jj++)
+                    {
+                        for (int ii = 0; ii < stftRep.wSamp / 2; ii++)
+                        {
+                            HFC[jj] = HFC[jj] + (float)Math.Pow((double)stftRep.timeFreqData[ii][jj] * ii, 2);
+                        }
+                    }
+                });
+            }
+            Task.WaitAll(tasks);
 
             float maxi = HFC.Max();
 
@@ -369,86 +376,100 @@ namespace DigitalMusicAnalysis
 
             double[] maximum_Arr = new double[lengths.Count];
             int[] maxInd_Arr = new int[lengths.Count];
-            Parallel.For(0, DoP, new ParallelOptions { MaxDegreeOfParallelism = DoP }, workerId =>
+            //Parallel.For(0, lengths.Count, new ParallelOptions { MaxDegreeOfParallelism = DoP }, mm =>
+            //{
+            for (int workerId = 0; workerId < DoP; workerId++)
             {
                 int start = lengths.Count * workerId / DoP;
                 int end = lengths.Count * (workerId + 1) / DoP;
-                for (int mm = start; mm < end; mm++)
+
+                tasks[workerId] = Task.Factory.StartNew(() =>
                 {
-                    int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
-                    twiddles_arr[mm] = new Complex[nearest];
-
-                    for (int ll = 0; ll < nearest; ll++)
+                    for (int mm = start; mm < end; mm++)
                     {
-                        // Vector potential
-                        double a = 2 * pi * ll / (double)nearest;
-                        twiddles_arr[mm][ll] = Complex.Pow(Complex.Exp(-i), (float)a);
+                        int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
+                        twiddles_arr[mm] = new Complex[nearest];
+
+                        for (int ll = 0; ll < nearest; ll++)
+                        {
+                            // Vector potential
+                            double a = 2 * pi * ll / (double)nearest;
+                            twiddles_arr[mm][ll] = Complex.Pow(Complex.Exp(-i), (float)a);
+                        }
                     }
-                }
-            });
+                });
+            }
+            Task.WaitAll(tasks);
 
 
-            Parallel.For(0, DoP, new ParallelOptions { MaxDegreeOfParallelism = DoP }, workerId =>
+            //Parallel.For(0, lengths.Count, new ParallelOptions { MaxDegreeOfParallelism = DoP }, mm =>
+            //{
+            for (int id = 0; id < DoP; id++)
             {
                 //int start = lengths.Count * workerId / DoP;
                 //int end = lengths.Count * (workerId + 1) / DoP;
-                for (int mm = workerId; mm < lengths.Count; mm += DoP)
+                int workerId = id;
+
+                tasks[workerId] = Task.Factory.StartNew(() =>
                 {
-                    int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
-                    Complex[] compX = new Complex[nearest];
-                    Complex[] Y = new Complex[nearest];
-
-                    for (int kk = 0; kk < nearest; kk++)
+                    for (int mm = workerId; mm < lengths.Count; mm += DoP)
                     {
-                        if (kk < lengths[mm] && (noteStarts[mm] + kk) < waveIn.wave.Length)
+                        int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
+                        Complex[] compX = new Complex[nearest];
+                        Complex[] Y = new Complex[nearest];
+
+                        for (int kk = 0; kk < nearest; kk++)
                         {
-                            compX[kk] = waveIn.wave[noteStarts[mm] + kk];
-                        }
-                        else
-                        {
-                            compX[kk] = Complex.Zero;
-                        }
-                    }
-
-                    Y = fft(compX, nearest, mm);
-
-                    double[] absY = new double[nearest];
-
-                    maximum_Arr[mm] = 0;
-                    maxInd_Arr[mm] = 0;
-
-                    for (int jj = 0; jj < Y.Length; jj++)
-                    {
-                        absY[jj] = Y[jj].Magnitude;
-                        if (absY[jj] > maximum_Arr[mm])
-                        {
-                            maximum_Arr[mm] = absY[jj];
-                            maxInd_Arr[mm] = jj;
-                        }
-                    }
-
-                    for (int div = 6; div > 1; div--)
-                    {
-
-                        if (maxInd_Arr[mm] > nearest / 2)
-                        {
-                            if (absY[(int)Math.Floor((double)(nearest - maxInd_Arr[mm]) / div)] / absY[(maxInd_Arr[mm])] > 0.10)
+                            if (kk < lengths[mm] && (noteStarts[mm] + kk) < waveIn.wave.Length)
                             {
-                                maxInd_Arr[mm] = (nearest - maxInd_Arr[mm]) / div;
+                                compX[kk] = waveIn.wave[noteStarts[mm] + kk];
+                            }
+                            else
+                            {
+                                compX[kk] = Complex.Zero;
                             }
                         }
-                        else
+
+                        Y = fft(compX, nearest, mm);
+
+                        double[] absY = new double[nearest];
+
+                        maximum_Arr[mm] = 0;
+                        maxInd_Arr[mm] = 0;
+
+                        for (int jj = 0; jj < Y.Length; jj++)
                         {
-                            if (absY[(int)Math.Floor((double)maxInd_Arr[mm] / div)] / absY[(maxInd_Arr[mm])] > 0.10)
+                            absY[jj] = Y[jj].Magnitude;
+                            if (absY[jj] > maximum_Arr[mm])
                             {
-                                maxInd_Arr[mm] = maxInd_Arr[mm] / div;
+                                maximum_Arr[mm] = absY[jj];
+                                maxInd_Arr[mm] = jj;
+                            }
+                        }
+
+                        for (int div = 6; div > 1; div--)
+                        {
+
+                            if (maxInd_Arr[mm] > nearest / 2)
+                            {
+                                if (absY[(int)Math.Floor((double)(nearest - maxInd_Arr[mm]) / div)] / absY[(maxInd_Arr[mm])] > 0.10)
+                                {
+                                    maxInd_Arr[mm] = (nearest - maxInd_Arr[mm]) / div;
+                                }
+                            }
+                            else
+                            {
+                                if (absY[(int)Math.Floor((double)maxInd_Arr[mm] / div)] / absY[(maxInd_Arr[mm])] > 0.10)
+                                {
+                                    maxInd_Arr[mm] = maxInd_Arr[mm] / div;
+                                }
                             }
                         }
                     }
-                }
-            });
+                });
+            }
+            Task.WaitAll(tasks);
 
-            // Implicit barrier
             for (int mm = 0; mm < lengths.Count; mm++)
             {
                 int nearest = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
