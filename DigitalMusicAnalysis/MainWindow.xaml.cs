@@ -35,12 +35,17 @@ namespace DigitalMusicAnalysis
 			filename = openFile("Select Audio (wav) file");
 			//string xmlfile = openFile("Select Score (xml) file");
 			Thread check = new Thread(new ThreadStart(updateSlider));
-			loadWave(filename);
-			freqDomain();
-			//sheetmusic = readXML(xmlfile);
-			onsetDetection();
-			loadImage();
-			loadHistogram();
+			for (int i = 0; i < 5; i++)
+			{
+				DateTime start = DateTime.Now;
+				loadWave(filename);
+				freqDomain();
+				//sheetmusic = readXML(xmlfile);
+				onsetDetection();
+				loadImage();
+				loadHistogram();
+				Trace.WriteLine((DateTime.Now - start).TotalSeconds);
+			}
 			playBack();
 			check.Start();
 
@@ -367,7 +372,7 @@ namespace DigitalMusicAnalysis
 			{
 				if (starts > stops)
 				{
-					if (HFC[jj] < 0.001)
+					if (HFC[jj] < 0.0061)
 					{
 						noteStops.Add(jj * ((stftRep.wSamp - 1) / 2));
 						stops = stops + 1;
@@ -375,7 +380,7 @@ namespace DigitalMusicAnalysis
 				}
 				else if (starts - stops == 0)
 				{
-					if (HFC[jj] > 0.001)
+					if (HFC[jj] > 0.0061)
 					{
 						noteStarts.Add(jj * ((stftRep.wSamp - 1) / 2));
 						starts = starts + 1;
