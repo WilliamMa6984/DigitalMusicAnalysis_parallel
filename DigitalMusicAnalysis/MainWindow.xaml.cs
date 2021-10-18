@@ -34,7 +34,8 @@ namespace DigitalMusicAnalysis
 		public MainWindow()
 		{
 			InitializeComponent();
-			filename = openFile("Select Audio (wav) file");
+			//filename = openFile("Select Audio (wav) file");
+			filename = "D:\\OneDrive - Queensland University of Technology\\Yr 3 Sem 2\\CAB401\\A2 - Project\\Project\\music\\Jupiter4.wav";
 			//string xmlfile = openFile("Select Score (xml) file");
 			Thread check = new Thread(new ThreadStart(updateSlider));
 			//for (int i = 0; i < 5; i++)
@@ -56,6 +57,8 @@ namespace DigitalMusicAnalysis
 
 			slider1.ValueChanged += updateHistogram;
 			playback.PlaybackStopped += closeMusic;
+
+			Environment.Exit(0);
 		}
 
 		// Loads time-freq image for tab 1
@@ -525,7 +528,7 @@ namespace DigitalMusicAnalysis
 								compX[kk] = Complex.Zero;
 							}
 						}
-						
+
 						// O(2m), m = nearest[mm]
 						Y = fft(compX, nearest[mm], mm);
 
