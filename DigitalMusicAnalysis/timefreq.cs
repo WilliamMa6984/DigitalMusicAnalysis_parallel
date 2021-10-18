@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Numerics;
-using System.Threading.Tasks;
+using System.Threading;
 
 namespace DigitalMusicAnalysis
 {
@@ -73,17 +73,17 @@ namespace DigitalMusicAnalysis
 			int max = (int)(2 * Math.Floor((double)N / (double)wSamp) - 1);
 			Complex[][] tempFFT = new Complex[max][];
 
-			Task[] tasks = new Task[MainWindow.DoP];
+			//Task[] tasks = new Task[MainWindow.DoP];
 			//Parallel.For(0, max, new ParallelOptions { MaxDegreeOfParallelism = MainWindow.DoP }, i =>
 			//{
-
+			int count = MainWindow.DoP;
 			for (int id = 0; id < MainWindow.DoP; id++)
 			{
 				//int start = max * workerId / MainWindow.DoP;
 				//int end = max * (workerId + 1) / MainWindow.DoP;
 				int workerId = id;
 
-				tasks[workerId] = Task.Factory.StartNew(() =>
+				ThreadPool.QueueUserWorkItem((_) =>
 				{
 					for (int i = workerId; i < max; i += MainWindow.DoP)
 					{
@@ -97,9 +97,10 @@ namespace DigitalMusicAnalysis
 						tempFFT[i] = new Complex[wSamp];
 						tempFFT[i] = fft(temp);
 					}
+					Interlocked.Decrement(ref count);
 				});
 			}
-			Task.WaitAll(tasks);
+			SpinWait.SpinUntil(() => count == 0);
 			//Trace.WriteLine("timefreq.stft fftLoop: " + (DateTime.Now - start).ToString());
 
 			for (ii = 0; ii < max; ii++)

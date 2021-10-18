@@ -11,7 +11,6 @@ using System.Threading;
 using System.Numerics;
 using NAudio.Wave;
 using System.Xml;
-using System.Threading.Tasks;
 using System.Diagnostics;
 
 namespace DigitalMusicAnalysis
@@ -29,7 +28,7 @@ namespace DigitalMusicAnalysis
 		private enum pitchConv { C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B };
 		private double bpm = 70;
 
-		public static int DoP = Environment.ProcessorCount;
+		public static int DoP = Environment.ProcessorCount / 2;
 
 		public MainWindow()
 		{
@@ -40,14 +39,15 @@ namespace DigitalMusicAnalysis
 			Thread check = new Thread(new ThreadStart(updateSlider));
 			//for (int i = 0; i < 5; i++)
 			//{
-			DateTime start = DateTime.Now;
+			Stopwatch sw = Stopwatch.StartNew();
 			loadWave(filename);
 			freqDomain();
 			//sheetmusic = readXML(xmlfile);
 			onsetDetection();
 			loadImage();
 			loadHistogram();
-			Trace.WriteLine((DateTime.Now - start).TotalSeconds);
+			sw.Stop();
+			Trace.WriteLine(sw.ElapsedMilliseconds);
 			//}
 			playBack();
 			check.Start();
@@ -312,7 +312,7 @@ namespace DigitalMusicAnalysis
 
 			HFC = new float[stftRep.timeFreqData[0].Length];
 
-			Task[] tasks = new Task[DoP];
+			int count = DoP;
 			//Parallel.For(0, stftRep.timeFreqData[0].Length, new ParallelOptions { MaxDegreeOfParallelism = DoP }, jj =>
 			//{
 			for (int workerId = 0; workerId < DoP; workerId++)
@@ -320,7 +320,7 @@ namespace DigitalMusicAnalysis
 				int start = stftRep.timeFreqData[0].Length * workerId / DoP;
 				int end = stftRep.timeFreqData[0].Length * (workerId + 1) / DoP;
 
-				tasks[workerId] = Task.Factory.StartNew(() =>
+				ThreadPool.QueueUserWorkItem((_) =>
 				{
 					for (int jj = start; jj < end; jj++)
 					{
@@ -329,9 +329,10 @@ namespace DigitalMusicAnalysis
 							HFC[jj] = HFC[jj] + (float)Math.Pow((double)stftRep.timeFreqData[ii][jj] * ii, 2);
 						}
 					}
+					Interlocked.Decrement(ref count);
 				});
 			}
-			Task.WaitAll(tasks);
+			SpinWait.SpinUntil(() => count == 0);
 
 			float maxi = HFC.Max();
 
@@ -429,12 +430,13 @@ namespace DigitalMusicAnalysis
 			int[] nearest = new int[lengths.Count];
 			//Parallel.For(0, lengths.Count, new ParallelOptions { MaxDegreeOfParallelism = DoP }, mm =>
 			//{
+			count = DoP;
 			for (int workerId = 0; workerId < DoP; workerId++)
 			{
 				int start = lengths.Count * workerId / DoP;
 				int end = lengths.Count * (workerId + 1) / DoP;
 
-				tasks[workerId] = Task.Factory.StartNew(() =>
+				ThreadPool.QueueUserWorkItem((_) =>
 				{
 					for (int mm = start; mm < end; mm++)
 					{
@@ -448,9 +450,10 @@ namespace DigitalMusicAnalysis
 							twiddles_arr[mm][ll] = Complex.Pow(Complex.Exp(-i), (float)a);
 						}
 					}
+					Interlocked.Decrement(ref count);
 				});
 			}
-			Task.WaitAll(tasks);
+			SpinWait.SpinUntil(() => count == 0);
 
 
 			//Parallel.For(0, lengths.Count, new ParallelOptions { MaxDegreeOfParallelism = DoP }, mm =>
@@ -505,11 +508,11 @@ namespace DigitalMusicAnalysis
 				prev_end = curr_end;
 			}
 
-
+			count = DoP;
 			for (int id = 0; id < DoP; id++)
 			{
 				int workerId = id;
-				tasks[workerId] = Task.Factory.StartNew(() =>
+				ThreadPool.QueueUserWorkItem((_) =>
 				{
 					for (int mm = start_points[workerId]; mm < end_points[workerId]; mm++)
 					{
@@ -566,9 +569,10 @@ namespace DigitalMusicAnalysis
 							}
 						}
 					}
+					Interlocked.Decrement(ref count);
 				});
 			}
-			Task.WaitAll(tasks);
+			SpinWait.SpinUntil(() => count == 0);
 
 			for (int mm = 0; mm < lengths.Count; mm++)
 			{
