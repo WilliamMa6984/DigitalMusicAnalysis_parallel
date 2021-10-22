@@ -56,8 +56,6 @@ namespace DigitalMusicAnalysis
 
 		float[][] stft(Complex[] x, int wSamp)
 		{
-			int ii = 0;
-			int kk = 0;
 			int ll = 0;
 			int N = x.Length;
 			float fftMax = 0;
@@ -92,29 +90,25 @@ namespace DigitalMusicAnalysis
 
 						tempFFT[i] = new Complex[wSamp];
 						tempFFT[i] = fft(temp);
+
+						for (int kk = 0; kk < wSamp / 2; kk++)
+						{
+							Y[kk][i] = (float)Complex.Abs(tempFFT[i][kk]);
+
+							if (Y[kk][i] > fftMax)
+							{
+								fftMax = Y[kk][i];
+							}
+						}
 					}
 					Interlocked.Decrement(ref count);
 				});
 			}
 			SpinWait.SpinUntil(() => count == 0);
 
-			for (ii = 0; ii < max; ii++)
+			for (int ii = 0; ii < max; ii++)
 			{
-				for (kk = 0; kk < wSamp / 2; kk++)
-				{
-					Y[kk][ii] = (float)Complex.Abs(tempFFT[ii][kk]);
-
-					if (Y[kk][ii] > fftMax)
-					{
-						fftMax = Y[kk][ii];
-					}
-				}
-
-			}
-
-			for (ii = 0; ii < max; ii++)
-			{
-				for (kk = 0; kk < wSamp / 2; kk++)
+				for (int kk = 0; kk < wSamp / 2; kk++)
 				{
 					Y[kk][ii] /= fftMax;
 				}

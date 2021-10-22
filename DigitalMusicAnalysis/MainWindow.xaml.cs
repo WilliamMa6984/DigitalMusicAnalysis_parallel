@@ -28,7 +28,7 @@ namespace DigitalMusicAnalysis
         private enum pitchConv { C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B };
         private double bpm = 70;
 
-        public static int DoP = Environment.ProcessorCount / 2;
+        public static int DoP = 16;
 
         public MainWindow()
         {
@@ -373,6 +373,10 @@ namespace DigitalMusicAnalysis
             double[] maximum_Arr = new double[lengths.Count];
             int[] maxInd_Arr = new int[lengths.Count];
             int[] nearest = new int[lengths.Count];
+
+            Complex[][] compX = new Complex[lengths.Count][];
+            Complex[][] Y = new Complex[lengths.Count][];
+
             count = DoP;
             for (int workerId = 0; workerId < DoP; workerId++)
             {
@@ -445,32 +449,32 @@ namespace DigitalMusicAnalysis
                 {
                     for (int mm = start_points[workerId]; mm < end_points[workerId]; mm++)
                     {
-                        Complex[] compX = new Complex[nearest[mm]];
-                        Complex[] Y = new Complex[nearest[mm]];
+                        compX[mm] = new Complex[nearest[mm]];
+                        Y[mm] = new Complex[nearest[mm]];
 
                         for (int kk = 0; kk < nearest[mm]; kk++)
                         {
                             if (kk < lengths[mm] && (noteStarts[mm] + kk) < waveIn.wave.Length)
                             {
-                                compX[kk] = waveIn.wave[noteStarts[mm] + kk];
+                                compX[mm][kk] = waveIn.wave[noteStarts[mm] + kk];
                             }
                             else
                             {
-                                compX[kk] = Complex.Zero;
+                                compX[mm][kk] = Complex.Zero;
                             }
                         }
 
                         // O(2m), m = nearest[mm]
-                        Y = fft(compX, nearest[mm], mm);
+                        Y[mm] = fft(compX[mm], nearest[mm], mm);
 
                         double[] absY = new double[nearest[mm]];
 
                         maximum_Arr[mm] = 0;
                         maxInd_Arr[mm] = 0;
 
-                        for (int jj = 0; jj < Y.Length; jj++)
+                        for (int jj = 0; jj < Y[mm].Length; jj++)
                         {
-                            absY[jj] = Y[jj].Magnitude;
+                            absY[jj] = Y[mm][jj].Magnitude;
                             if (absY[jj] > maximum_Arr[mm])
                             {
                                 maximum_Arr[mm] = absY[jj];
