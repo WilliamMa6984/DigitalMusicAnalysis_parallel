@@ -392,7 +392,6 @@ namespace DigitalMusicAnalysis
 
                         for (int ll = 0; ll < nearest[mm]; ll++)
                         {
-                            // Vector potential
                             double a = 2 * pi * ll / (double)nearest[mm];
                             twiddles_arr[mm][ll] = Complex.Pow(Complex.Exp(-i), (float)a);
                         }
@@ -402,7 +401,7 @@ namespace DigitalMusicAnalysis
             }
             SpinWait.SpinUntil(() => count == 0);
 
-            // O(n*2m)
+            // Calculate total iterations O(n*2m)
             int calculated_total = 0;
             for (int mm = 0; mm < lengths.Count; mm++)
             {
@@ -410,11 +409,10 @@ namespace DigitalMusicAnalysis
             }
             int calculated_size = calculated_total / DoP;
 
+            // Use calculated total to create more accurate distribution
             int[] start_points = new int[DoP];
             int[] end_points = new int[DoP];
-
             int prev_end = 0;
-
 
             for (int id = 0; id < DoP; id++)
             {
