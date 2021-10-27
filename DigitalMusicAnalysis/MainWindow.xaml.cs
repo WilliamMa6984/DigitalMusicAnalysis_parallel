@@ -29,7 +29,7 @@ namespace DigitalMusicAnalysis
         private enum pitchConv { C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B };
         private double bpm = 70;
 
-        public static int DoP = 16;
+        public static int DoP = 8;
 
         public MainWindow()
         {
@@ -817,7 +817,7 @@ namespace DigitalMusicAnalysis
         }
 
         // FFT function for Pitch Detection
-        
+
         private Complex[] fft(Complex[] x, int L, int mm)
         {
             int ii = 0;
