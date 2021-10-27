@@ -1,6 +1,7 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Numerics;
-using System.Threading.Tasks;
+using System.Threading;
 
 namespace DigitalMusicAnalysis
 {
@@ -55,9 +56,6 @@ namespace DigitalMusicAnalysis
 
 		float[][] stft(Complex[] x, int wSamp)
 		{
-			int ii = 0;
-			int jj = 0;
-			int kk = 0;
 			int ll = 0;
 			int N = x.Length;
 			float fftMax = 0;
@@ -70,51 +68,47 @@ namespace DigitalMusicAnalysis
 			}
 
 			int max = (int)(2 * Math.Floor((double)N / (double)wSamp) - 1);
-			Complex[][] temp = new Complex[max][];
 			Complex[][] tempFFT = new Complex[max][];
-			for (int i = 0; i < max; i++)
-			{
-				temp[i] = new Complex[wSamp];
-				tempFFT[i] = new Complex[wSamp];
-			}
 
-			for (ii = 0; ii < max; ii++)
+			int count = MainWindow.DoP;
+			for (int id = 0; id < MainWindow.DoP; id++)
 			{
+				int workerId = id;
+				int start = max * workerId / MainWindow.DoP;
+				int end = max * (workerId + 1) / MainWindow.DoP;
 
-				for (jj = 0; jj < wSamp; jj++)
+				ThreadPool.QueueUserWorkItem((_) =>
 				{
-					temp[ii][jj] = x[ii * (wSamp / 2) + jj];
-				}
-			}
-
-
-			Parallel.For(0, Environment.ProcessorCount, workerId =>
-			{
-				int start = max * workerId / Environment.ProcessorCount;
-				int end = max * (workerId + 1) / Environment.ProcessorCount;
-				for (int i = start; i < end; i++)
-				{
-					tempFFT[i] = fft(temp[i]);
-				}
-			});
-
-			for (ii = 0; ii < max; ii++)
-			{
-				for (kk = 0; kk < wSamp / 2; kk++)
-				{
-					Y[kk][ii] = (float)Complex.Abs(tempFFT[ii][kk]);
-
-					if (Y[kk][ii] > fftMax)
+					for (int i = start; i < end; i++)
 					{
-						fftMax = Y[kk][ii];
+						Complex[] temp = new Complex[wSamp];
+
+						for (int j = 0; j < wSamp; j++)
+						{
+							temp[j] = x[i * (wSamp / 2) + j];
+						}
+
+						tempFFT[i] = new Complex[wSamp];
+						tempFFT[i] = fft(temp);
+
+						for (int kk = 0; kk < wSamp / 2; kk++)
+						{
+							Y[kk][i] = (float)Complex.Abs(tempFFT[i][kk]);
+
+							if (Y[kk][i] > fftMax)
+							{
+								fftMax = Y[kk][i];
+							}
+						}
 					}
-				}
-
+					Interlocked.Decrement(ref count);
+				});
 			}
+			SpinWait.SpinUntil(() => count == 0);
 
-			for (ii = 0; ii < max; ii++)
+			for (int ii = 0; ii < max; ii++)
 			{
-				for (kk = 0; kk < wSamp / 2; kk++)
+				for (int kk = 0; kk < wSamp / 2; kk++)
 				{
 					Y[kk][ii] /= fftMax;
 				}
@@ -139,8 +133,6 @@ namespace DigitalMusicAnalysis
 			}
 			else{
 
-				Complex[] E = new Complex[N/2];
-				Complex[] O = new Complex[N/2];
 				Complex[] even = new Complex[N/2];
 				Complex[] odd = new Complex[N/2];
 
@@ -157,8 +149,8 @@ namespace DigitalMusicAnalysis
 					}
 				}
 
-				E = fft(even);
-				O = fft(odd);
+				Complex[] E = fft(even);
+				Complex[] O = fft(odd);
 
 				for (kk = 0; kk < N; kk++)
 				{
