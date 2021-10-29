@@ -34,9 +34,16 @@ namespace DigitalMusicAnalysis
 
         public MainWindow()
         {
+            int completionPortThreads = 0;
+            ThreadPool.GetMinThreads(out _, out completionPortThreads);
+            ThreadPool.SetMinThreads(DoP, completionPortThreads);
+            ThreadPool.GetMaxThreads(out _, out completionPortThreads);
+            ThreadPool.SetMaxThreads(DoP, completionPortThreads);
             InitializeComponent();
-            filename = openFile("Select Audio (wav) file");
-            string xmlfile = openFile("Select Score (xml) file");
+            //filename = openFile("Select Audio (wav) file");
+            //string xmlfile = openFile("Select Score (xml) file");
+            filename = "D:\\OneDrive - Queensland University of Technology\\Yr 3 Sem 2\\CAB401\\A2 - Project\\Project\\music\\Jupiter.wav";
+            string xmlfile = "D:\\OneDrive - Queensland University of Technology\\Yr 3 Sem 2\\CAB401\\A2 - Project\\Project\\music\\Jupiter.xml";
             Thread check = new Thread(new ThreadStart(updateSlider));
             for (int i = 0; i < 10; i++)
             {
@@ -58,6 +65,8 @@ namespace DigitalMusicAnalysis
 
             slider1.ValueChanged += updateHistogram;
             playback.PlaybackStopped += closeMusic;
+
+            Environment.Exit(0);
         }
 
         // Loads time-freq image for tab 1
@@ -309,25 +318,13 @@ namespace DigitalMusicAnalysis
 
             HFC = new float[stftRep.timeFreqData[0].Length];
 
-            int count = DoP;
-            for (int workerId = 0; workerId < DoP; workerId++)
+            Parallel.For(0, stftRep.timeFreqData[0].Length, myParallelOptions, jj =>
             {
-                int start = stftRep.timeFreqData[0].Length * workerId / DoP;
-                int end = stftRep.timeFreqData[0].Length * (workerId + 1) / DoP;
-
-                ThreadPool.QueueUserWorkItem((_) =>
+                for (int ii = 0; ii < stftRep.wSamp / 2; ii++)
                 {
-                    for (int jj = start; jj < end; jj++)
-                    {
-                        for (int ii = 0; ii < stftRep.wSamp / 2; ii++)
-                        {
-                            HFC[jj] = HFC[jj] + (float)Math.Pow((double)stftRep.timeFreqData[ii][jj] * ii, 2);
-                        }
-                    }
-                    Interlocked.Decrement(ref count);
-                });
-            }
-            SpinWait.SpinUntil(() => count == 0);
+                    HFC[jj] = HFC[jj] + (float)Math.Pow((double)stftRep.timeFreqData[ii][jj] * ii, 2);
+                }
+            });
 
             float maxi = HFC.Max();
 
@@ -412,52 +409,42 @@ namespace DigitalMusicAnalysis
             // O(2m), m = nearest[mm]
             Y = parallel_fft(compX, nearest, lengths.Count);
 
-            count = DoP;
-            for (int id = 0; id < DoP; id++)
+            Parallel.For(0, lengths.Count, myParallelOptions, mm =>
             {
-                int workerId = id;
-                ThreadPool.QueueUserWorkItem((_) =>
+                double[] absY = new double[nearest[mm]];
+
+                maximum_Arr[mm] = 0;
+                maxInd_Arr[mm] = 0;
+
+                for (int jj = 0; jj < Y[mm].Length; jj++)
                 {
-                    for (int mm = workerId; mm < lengths.Count; mm+=DoP)
+                    absY[jj] = Y[mm][jj].Magnitude;
+                    if (absY[jj] > maximum_Arr[mm])
                     {
-                        double[] absY = new double[nearest[mm]];
+                        maximum_Arr[mm] = absY[jj];
+                        maxInd_Arr[mm] = jj;
+                    }
+                }
 
-                        maximum_Arr[mm] = 0;
-                        maxInd_Arr[mm] = 0;
+                for (int div = 6; div > 1; div--)
+                {
 
-                        for (int jj = 0; jj < Y[mm].Length; jj++)
+                    if (maxInd_Arr[mm] > nearest[mm] / 2)
+                    {
+                        if (absY[(int)Math.Floor((double)(nearest[mm] - maxInd_Arr[mm]) / div)] / absY[(maxInd_Arr[mm])] > 0.10)
                         {
-                            absY[jj] = Y[mm][jj].Magnitude;
-                            if (absY[jj] > maximum_Arr[mm])
-                            {
-                                maximum_Arr[mm] = absY[jj];
-                                maxInd_Arr[mm] = jj;
-                            }
-                        }
-
-                        for (int div = 6; div > 1; div--)
-                        {
-
-                            if (maxInd_Arr[mm] > nearest[mm] / 2)
-                            {
-                                if (absY[(int)Math.Floor((double)(nearest[mm] - maxInd_Arr[mm]) / div)] / absY[(maxInd_Arr[mm])] > 0.10)
-                                {
-                                    maxInd_Arr[mm] = (nearest[mm] - maxInd_Arr[mm]) / div;
-                                }
-                            }
-                            else
-                            {
-                                if (absY[(int)Math.Floor((double)maxInd_Arr[mm] / div)] / absY[(maxInd_Arr[mm])] > 0.10)
-                                {
-                                    maxInd_Arr[mm] = maxInd_Arr[mm] / div;
-                                }
-                            }
+                            maxInd_Arr[mm] = (nearest[mm] - maxInd_Arr[mm]) / div;
                         }
                     }
-                    Interlocked.Decrement(ref count);
-                });
-            }
-            SpinWait.SpinUntil(() => count == 0);
+                    else
+                    {
+                        if (absY[(int)Math.Floor((double)maxInd_Arr[mm] / div)] / absY[(maxInd_Arr[mm])] > 0.10)
+                        {
+                            maxInd_Arr[mm] = maxInd_Arr[mm] / div;
+                        }
+                    }
+                }
+            });
 
             for (int mm = 0; mm < lengths.Count; mm++)
             {
@@ -804,8 +791,9 @@ namespace DigitalMusicAnalysis
             });
 
 
+            
             // Calculate total iterations O(n*2m)
-            int fftDoP = DoP / 2;
+            int fftDoP = Math.Max(1, DoP / 2); // Minimum 1
             int calculated_total = 0;
             for (int mm = 0; mm < lengths_count; mm++)
             {
