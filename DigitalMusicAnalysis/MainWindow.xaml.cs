@@ -312,11 +312,11 @@ namespace DigitalMusicAnalysis
 
 			HFC = new float[stftRep.timeFreqData[0].Length];
 
-            int count = DoP;
-            for (int workerId = 0; workerId < DoP; workerId++)
-            {
-                int start = stftRep.timeFreqData[0].Length * workerId / DoP;
-                int end = stftRep.timeFreqData[0].Length * (workerId + 1) / DoP;
+			int count = DoP;
+			for (int workerId = 0; workerId < DoP; workerId++)
+			{
+				int start = stftRep.timeFreqData[0].Length * workerId / DoP;
+				int end = stftRep.timeFreqData[0].Length * (workerId + 1) / DoP;
 
 				ThreadPool.QueueUserWorkItem((_) =>
 				{
@@ -339,50 +339,61 @@ namespace DigitalMusicAnalysis
 				HFC[jj] = (float)Math.Pow((HFC[jj] / maxi), 2);
 			}
 
-			/*double threshold = 0;
-			double step = 0.000000001;
-			long min = (long)Math.Ceiling(1 / step);
-			long max = (long)Math.Ceiling(0 / step);
-			double t_max = 0;
-			int stops_max = 0;
-			//while (starts < 1400 || threshold > 1.0)
-			//for (int ii = 0; ii < 0.4 / 0.000000001; ii += 0.000000001 / 0.000000001)
-			for (long ii = min; ii < max; ii++)
-			{
-				noteStarts = new List<int>(100);
-				noteStops = new List<int>(100);
-				stops = 0;
-				starts = 0;
-				//threshold += 0.0000001;
-				threshold = ii * step;
-
-				for (int jj = 0; jj < stftRep.timeFreqData[0].Length; jj++)
-				{
-					if (starts > stops)
-					{
-						if (HFC[jj] < threshold)
+			// Jupiter1: 0.001 -> count 72
+			// Jupiter2: 0.0061 -> 295
+			// Jupiter2-2: 0.0060515 -> 295*2
+			/*			double threshold = 0;
+						double step = 0.0000001;
+						long min = (long)Math.Ceiling(0 / step);
+						long max = (long)Math.Ceiling(1 / step);
+						double t_max = 0;
+						int stops_max = 0;
+						//while (starts < 1400 || threshold > 1.0)
+						//for (int ii = 0; ii < 0.4 / 0.000000001; ii += 0.000000001 / 0.000000001)
+						for (long ii = min; ii < max; ii++)
 						{
-							noteStops.Add(jj * ((stftRep.wSamp - 1) / 2));
-							stops = stops + 1;
-						}
-					}
-					else if (starts - stops == 0)
-					{
-						if (HFC[jj] > threshold)
-						{
-							noteStarts.Add(jj * ((stftRep.wSamp - 1) / 2));
-							starts = starts + 1;
+							noteStarts = new List<int>(100);
+							noteStops = new List<int>(100);
+							stops = 0;
+							starts = 0;
+							//threshold += 0.0000001;
+							threshold = ii * step;
+
+							for (int jj = 0; jj < stftRep.timeFreqData[0].Length; jj++)
+							{
+								if (starts > stops)
+								{
+									if (HFC[jj] < threshold)
+									{
+										noteStops.Add(jj * ((stftRep.wSamp - 1) / 2));
+										stops = stops + 1;
+									}
+								}
+								else if (starts - stops == 0)
+								{
+									if (HFC[jj] > threshold)
+									{
+										noteStarts.Add(jj * ((stftRep.wSamp - 1) / 2));
+										starts = starts + 1;
+									}
+
+								}
+							}
+
+							if (stops_max < stops)
+							{
+								stops_max = stops;
+								t_max = threshold;
+							}
+							if (stops_max >= 295*2)
+							{
+								break;
+							}
 						}
 
-					}
-				}
+						Trace.WriteLine(t_max);
+						Trace.WriteLine(stops_max);*/
 
-				if (stops_max < stops)
-				{
-					stops_max = stops;
-					t_max = threshold;
-				}
-			}*/
 
 			for (int jj = 0; jj < stftRep.timeFreqData[0].Length; jj++)
 			{
@@ -411,23 +422,23 @@ namespace DigitalMusicAnalysis
 			}
 
 
-            // DETERMINES START AND FINISH TIME OF NOTES BASED ON ONSET DETECTION
+			// DETERMINES START AND FINISH TIME OF NOTES BASED ON ONSET DETECTION
 
-            for (int ii = 0; ii < noteStops.Count; ii++)
-            {
-                lengths.Add(noteStops[ii] - noteStarts[ii]);
-            }
+			for (int ii = 0; ii < noteStops.Count; ii++)
+			{
+				lengths.Add(noteStops[ii] - noteStarts[ii]);
+			}
 
-            twiddles_arr = new Complex[lengths.Count][];
+			twiddles_arr = new Complex[lengths.Count][];
 
-            double[] maximum_Arr = new double[lengths.Count];
-            int[] maxInd_Arr = new int[lengths.Count];
-            int[] nearest = new int[lengths.Count];
-            count = DoP;
-            for (int workerId = 0; workerId < DoP; workerId++)
-            {
-                int start = lengths.Count * workerId / DoP;
-                int end = lengths.Count * (workerId + 1) / DoP;
+			double[] maximum_Arr = new double[lengths.Count];
+			int[] maxInd_Arr = new int[lengths.Count];
+			int[] nearest = new int[lengths.Count];
+			count = DoP;
+			for (int workerId = 0; workerId < DoP; workerId++)
+			{
+				int start = lengths.Count * workerId / DoP;
+				int end = lengths.Count * (workerId + 1) / DoP;
 
 				ThreadPool.QueueUserWorkItem((_) =>
 				{
@@ -448,13 +459,13 @@ namespace DigitalMusicAnalysis
 			}
 			SpinWait.SpinUntil(() => count == 0);
 
-            // O(n*2m)
-            int calculated_total = 0;
-            for (int mm = 0; mm < lengths.Count; mm++)
-            {
-                calculated_total += nearest[mm] * 2;
-            }
-            int calculated_size = calculated_total / DoP;
+			// O(n*2m)
+			int calculated_total = 0;
+			for (int mm = 0; mm < lengths.Count; mm++)
+			{
+				calculated_total += nearest[mm] * 2;
+			}
+			int calculated_size = calculated_total / DoP;
 
 			int[] start_points = new int[DoP];
 			int[] end_points = new int[DoP];
@@ -462,22 +473,22 @@ namespace DigitalMusicAnalysis
 			int prev_end = 0;
 
 
-            for (int id = 0; id < DoP; id++)
-            {
-                int size = 0;
-                int total_size = 0;
-                do
-                {
-                    if (prev_end + size < lengths.Count)
-                    {
-                        total_size += nearest[prev_end + size] * 2;
-                        size++;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                } while (total_size < calculated_size);
+			for (int id = 0; id < DoP; id++)
+			{
+				int size = 0;
+				int total_size = 0;
+				do
+				{
+					if (prev_end + size < lengths.Count)
+					{
+						total_size += nearest[prev_end + size] * 2;
+						size++;
+					}
+					else
+					{
+						break;
+					}
+				} while (total_size < calculated_size);
 
 				int curr_end = prev_end + size;
 
@@ -487,16 +498,16 @@ namespace DigitalMusicAnalysis
 				prev_end = curr_end;
 			}
 
-            count = DoP;
-            for (int id = 0; id < DoP; id++)
-            {
-                int workerId = id;
-                ThreadPool.QueueUserWorkItem((_) =>
-                {
-                    for (int mm = start_points[workerId]; mm < end_points[workerId]; mm++)
-                    {
-                        Complex[] compX = new Complex[nearest[mm]];
-                        Complex[] Y = new Complex[nearest[mm]];
+			count = DoP;
+			for (int id = 0; id < DoP; id++)
+			{
+				int workerId = id;
+				ThreadPool.QueueUserWorkItem((_) =>
+				{
+					for (int mm = start_points[workerId]; mm < end_points[workerId]; mm++)
+					{
+						Complex[] compX = new Complex[nearest[mm]];
+						Complex[] Y = new Complex[nearest[mm]];
 
 						for (int kk = 0; kk < nearest[mm]; kk++)
 						{
@@ -552,17 +563,17 @@ namespace DigitalMusicAnalysis
 			}
 			SpinWait.SpinUntil(() => count == 0);
 
-            for (int mm = 0; mm < lengths.Count; mm++)
-            {
-                if (maxInd_Arr[mm] > nearest[mm] / 2)
-                {
-                    pitches.Add((nearest[mm] - maxInd_Arr[mm]) * waveIn.SampleRate / nearest[mm]);
-                }
-                else
-                {
-                    pitches.Add(maxInd_Arr[mm] * waveIn.SampleRate / nearest[mm]);
-                }
-            }
+			for (int mm = 0; mm < lengths.Count; mm++)
+			{
+				if (maxInd_Arr[mm] > nearest[mm] / 2)
+				{
+					pitches.Add((nearest[mm] - maxInd_Arr[mm]) * waveIn.SampleRate / nearest[mm]);
+				}
+				else
+				{
+					pitches.Add(maxInd_Arr[mm] * waveIn.SampleRate / nearest[mm]);
+				}
+			}
 
 			musicNote[] noteArray;
 			noteArray = new musicNote[noteStarts.Count()];
