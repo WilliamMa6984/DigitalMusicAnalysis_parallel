@@ -12,6 +12,7 @@ using System.Numerics;
 using NAudio.Wave;
 using System.Xml;
 using System.Diagnostics;
+using System.Threading.Tasks;
 
 namespace DigitalMusicAnalysis
 {
@@ -28,7 +29,8 @@ namespace DigitalMusicAnalysis
 		private enum pitchConv { C, Db, D, Eb, E, F, Gb, G, Ab, A, Bb, B };
 		private double bpm = 70;
 
-		public static int DoP = Environment.ProcessorCount / 2;
+        public static int DoP = 8;
+        public static ParallelOptions myParallelOptions = new ParallelOptions { MaxDegreeOfParallelism = DoP };
 
 		public MainWindow()
 		{
@@ -431,113 +433,68 @@ namespace DigitalMusicAnalysis
 
 			twiddles_arr = new Complex[lengths.Count][];
 
-			double[] maximum_Arr = new double[lengths.Count];
-			int[] maxInd_Arr = new int[lengths.Count];
-			int[] nearest = new int[lengths.Count];
-			count = DoP;
-			for (int workerId = 0; workerId < DoP; workerId++)
-			{
-				int start = lengths.Count * workerId / DoP;
-				int end = lengths.Count * (workerId + 1) / DoP;
+            double[] maximum_Arr = new double[lengths.Count];
+            int[] maxInd_Arr = new int[lengths.Count];
+            int[] nearest = new int[lengths.Count];
 
-				ThreadPool.QueueUserWorkItem((_) =>
-				{
-					for (int mm = start; mm < end; mm++)
-					{
-						nearest[mm] = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
-						twiddles_arr[mm] = new Complex[nearest[mm]];
+            Complex[][] compX = new Complex[lengths.Count][];
+            Complex[][] Y = new Complex[lengths.Count][];
 
-						for (int ll = 0; ll < nearest[mm]; ll++)
-						{
-							// Vector potential
-							double a = 2 * pi * ll / (double)nearest[mm];
-							twiddles_arr[mm][ll] = Complex.Pow(Complex.Exp(-i), (float)a);
-						}
-					}
-					Interlocked.Decrement(ref count);
-				});
-			}
-			SpinWait.SpinUntil(() => count == 0);
+            Parallel.For(0, lengths.Count, myParallelOptions, mm =>
+            {
+                nearest[mm] = (int)Math.Pow(2, Math.Ceiling(Math.Log(lengths[mm], 2)));
+                twiddles_arr[mm] = new Complex[nearest[mm]];
 
-			// O(n*2m)
-			int calculated_total = 0;
-			for (int mm = 0; mm < lengths.Count; mm++)
-			{
-				calculated_total += nearest[mm] * 2;
-			}
-			int calculated_size = calculated_total / DoP;
+                for (int ll = 0; ll < nearest[mm]; ll++)
+                {
+                    double a = 2 * pi * ll / (double)nearest[mm];
+                    twiddles_arr[mm][ll] = Complex.Pow(Complex.Exp(-i), (float)a);
+                }
+            });
 
-			int[] start_points = new int[DoP];
-			int[] end_points = new int[DoP];
+            Parallel.For(0, lengths.Count, myParallelOptions, mm =>
+            {
+                compX[mm] = new Complex[nearest[mm]];
+                Y[mm] = new Complex[nearest[mm]];
 
-			int prev_end = 0;
+                for (int kk = 0; kk < nearest[mm]; kk++)
+                {
+                    if (kk < lengths[mm] && (noteStarts[mm] + kk) < waveIn.wave.Length)
+                    {
+                        compX[mm][kk] = waveIn.wave[noteStarts[mm] + kk];
+                    }
+                    else
+                    {
+                        compX[mm][kk] = Complex.Zero;
+                    }
+                }
+            });
 
+            // O(2m), m = nearest[mm]
+            Y = parallel_fft(compX, nearest, lengths.Count);
 
-			for (int id = 0; id < DoP; id++)
-			{
-				int size = 0;
-				int total_size = 0;
-				do
-				{
-					if (prev_end + size < lengths.Count)
-					{
-						total_size += nearest[prev_end + size] * 2;
-						size++;
-					}
-					else
-					{
-						break;
-					}
-				} while (total_size < calculated_size);
-
-				int curr_end = prev_end + size;
-
-				start_points[id] = prev_end;
-				end_points[id] = curr_end;
-
-				prev_end = curr_end;
-			}
-
-			count = DoP;
-			for (int id = 0; id < DoP; id++)
-			{
-				int workerId = id;
-				ThreadPool.QueueUserWorkItem((_) =>
-				{
-					for (int mm = start_points[workerId]; mm < end_points[workerId]; mm++)
-					{
-						Complex[] compX = new Complex[nearest[mm]];
-						Complex[] Y = new Complex[nearest[mm]];
-
-						for (int kk = 0; kk < nearest[mm]; kk++)
-						{
-							if (kk < lengths[mm] && (noteStarts[mm] + kk) < waveIn.wave.Length)
-							{
-								compX[kk] = waveIn.wave[noteStarts[mm] + kk];
-							}
-							else
-							{
-								compX[kk] = Complex.Zero;
-							}
-						}
-
-						// O(2m), m = nearest[mm]
-						Y = fft(compX, nearest[mm], mm);
-
-						double[] absY = new double[nearest[mm]];
+            count = DoP;
+            for (int id = 0; id < DoP; id++)
+            {
+                int workerId = id;
+                ThreadPool.QueueUserWorkItem((_) =>
+                {
+                    for (int mm = workerId; mm < lengths.Count; mm+=DoP)
+                    {
+                        double[] absY = new double[nearest[mm]];
 
 						maximum_Arr[mm] = 0;
 						maxInd_Arr[mm] = 0;
 
-						for (int jj = 0; jj < Y.Length; jj++)
-						{
-							absY[jj] = Y[jj].Magnitude;
-							if (absY[jj] > maximum_Arr[mm])
-							{
-								maximum_Arr[mm] = absY[jj];
-								maxInd_Arr[mm] = jj;
-							}
-						}
+                        for (int jj = 0; jj < Y[mm].Length; jj++)
+                        {
+                            absY[jj] = Y[mm][jj].Magnitude;
+                            if (absY[jj] > maximum_Arr[mm])
+                            {
+                                maximum_Arr[mm] = absY[jj];
+                                maxInd_Arr[mm] = jj;
+                            }
+                        }
 
 						for (int div = 6; div > 1; div--)
 						{
@@ -846,13 +803,134 @@ namespace DigitalMusicAnalysis
 			playback.Dispose();
 		}
 
-		// FFT function for Pitch Detection
-		
-		private Complex[] fft(Complex[] x, int L, int mm)
-		{
-			int ii = 0;
-			int kk = 0;
-			int N = x.Length;
+        // FFT function for Pitch Detection
+
+        Complex[][] parallel_fft(Complex[][] x, int[] L, int lengths_count)
+        {
+            Complex[][] Y = new Complex[lengths_count][];
+
+            // NEED TO MEMSET TO ZERO?
+
+            Complex[][] even = new Complex[lengths_count][];
+            Complex[][] odd = new Complex[lengths_count][];
+
+            Complex[][] E = new Complex[lengths_count][];
+            Complex[][] O = new Complex[lengths_count][];
+
+            Parallel.For(0, lengths_count, myParallelOptions, mm =>
+            {
+                int N = x[mm].Length;
+                if (N == 1)
+                {
+                    Y[mm][0] = x[mm][0];
+                }
+                else
+                {
+
+                    even[mm] = new Complex[N / 2];
+                    odd[mm] = new Complex[N / 2];
+
+                    for (int ii = 0; ii < N; ii++)
+                    {
+
+                        if (ii % 2 == 0)
+                        {
+                            even[mm][ii / 2] = x[mm][ii];
+                        }
+                        if (ii % 2 == 1)
+                        {
+                            odd[mm][(ii - 1) / 2] = x[mm][ii];
+                        }
+                    }
+                }
+
+                E[mm] = new Complex[N / 2];
+                O[mm] = new Complex[N / 2];
+            });
+
+
+            // Calculate total iterations O(n*2m)
+            int fftDoP = DoP / 2;
+            int calculated_total = 0;
+            for (int mm = 0; mm < lengths_count; mm++)
+            {
+                calculated_total += L[mm] * 2;
+            }
+            int calculated_size = calculated_total / fftDoP;
+
+            // Use calculated total to create more accurate distribution
+            int[] start_points = new int[fftDoP];
+            int[] end_points = new int[fftDoP];
+            int prev_end = 0;
+
+            for (int id = 0; id < fftDoP; id++)
+            {
+                int size = 0;
+                int total_size = 0;
+                do
+                {
+                    if (prev_end + size < lengths_count)
+                    {
+                        total_size += L[prev_end + size] * 2;
+                        size++;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                } while (total_size < calculated_size);
+
+                int curr_end = prev_end + size;
+
+                start_points[id] = prev_end;
+                end_points[id] = curr_end;
+
+                prev_end = curr_end;
+            }
+
+            int count = fftDoP * 2;
+            for (int id = 0; id < fftDoP; id++)
+            {
+                int workerId = id;
+                ThreadPool.QueueUserWorkItem((_) =>
+                {
+                    for (int mm = start_points[workerId]; mm < end_points[workerId]; mm++)
+                    {
+                        E[mm] = fft(even[mm], L[mm], mm);
+                    }
+                    Interlocked.Decrement(ref count);
+                    //Trace.WriteLine(count);
+                });
+                ThreadPool.QueueUserWorkItem((_) =>
+                {
+                    for (int mm = start_points[workerId]; mm < end_points[workerId]; mm++)
+                    {
+                        O[mm] = fft(odd[mm], L[mm], mm);
+                    }
+                    Interlocked.Decrement(ref count);
+                    //Trace.WriteLine(count);
+                });
+            }
+            SpinWait.SpinUntil(() => count == 0);
+
+            Parallel.For(0, lengths_count, myParallelOptions, mm =>
+            {
+                int N = x[mm].Length;
+                Y[mm] = new Complex[N];
+                for (int kk = 0; kk < N; kk++)
+                {
+                    Y[mm][kk] = E[mm][(kk % (N / 2))] + O[mm][(kk % (N / 2))] * twiddles_arr[mm][kk * (L[mm] / N)];
+                }
+            });
+
+            return Y;
+        }
+
+        private Complex[] fft(Complex[] x, int L, int mm)
+        {
+            int ii = 0;
+            int kk = 0;
+            int N = x.Length;
 
 			Complex[] Y = new Complex[N];
 
@@ -1155,17 +1233,17 @@ namespace DigitalMusicAnalysis
 				F[0][j] = d * j;
 			}
 
-			for (int i = 0; i < A.Length + 1; i++)
-			{
-				F[i][0] = d * i;
-			}
-
-			for (int i = 1; i < A.Length + 1; i++)
-			{
-				for (int j = 1; j < B.Length + 1; j++)
-				{
-					int Ai = A[i - 1];
-					int Bj = B[j - 1];
+            for (int i = 0; i < A.Length + 1; i++)
+            {
+                F[i][0] = d * i;
+            }
+            
+            for (int i = 1; i < A.Length + 1; i++)
+            {
+                for (int j = 1; j < B.Length + 1; j++)
+                {
+                    int Ai = A[i - 1];
+                    int Bj = B[j - 1];
 
 					int x = F[i - 1][j - 1];
 					int y = S[Ai][Bj];

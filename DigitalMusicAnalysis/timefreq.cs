@@ -24,7 +24,7 @@ namespace DigitalMusicAnalysis
 				twiddles[ii] = Complex.Pow(Complex.Exp(-i), (float)a);
 			}
 
-			timeFreqData = new float[wSamp/2][];
+			timeFreqData = new float[wSamp / 2][];
 
 			int nearest = (int)Math.Ceiling((double)x.Length / (double)wSamp);
 			nearest = nearest * wSamp;
@@ -43,7 +43,7 @@ namespace DigitalMusicAnalysis
 			}
 
 
-			int cols = 2 * nearest /wSamp;
+			int cols = 2 * nearest / wSamp;
 
 			for (int jj = 0; jj < wSamp / 2; jj++)
 			{
@@ -51,17 +51,15 @@ namespace DigitalMusicAnalysis
 			}
 
 			timeFreqData = stft(compX, wSamp);
-	
+
 		}
 
 		float[][] stft(Complex[] x, int wSamp)
 		{
-			int ii = 0;
-			int kk = 0;
 			int ll = 0;
 			int N = x.Length;
 			float fftMax = 0;
-			
+
 			float[][] Y = new float[wSamp / 2][];
 
 			for (ll = 0; ll < wSamp / 2; ll++)
@@ -92,29 +90,25 @@ namespace DigitalMusicAnalysis
 
 						tempFFT[i] = new Complex[wSamp];
 						tempFFT[i] = fft(temp);
+
+						for (int kk = 0; kk < wSamp / 2; kk++)
+						{
+							Y[kk][i] = (float)Complex.Abs(tempFFT[i][kk]);
+
+							if (Y[kk][i] > fftMax)
+							{
+								fftMax = Y[kk][i];
+							}
+						}
 					}
 					Interlocked.Decrement(ref count);
 				});
 			}
 			SpinWait.SpinUntil(() => count == 0);
 
-			for (ii = 0; ii < max; ii++)
+			for (int ii = 0; ii < max; ii++)
 			{
-				for (kk = 0; kk < wSamp / 2; kk++)
-				{
-					Y[kk][ii] = (float)Complex.Abs(tempFFT[ii][kk]);
-
-					if (Y[kk][ii] > fftMax)
-					{
-						fftMax = Y[kk][ii];
-					}
-				}
-
-			}
-
-			for (ii = 0; ii < max; ii++)
-			{
-				for (kk = 0; kk < wSamp / 2; kk++)
+				for (int kk = 0; kk < wSamp / 2; kk++)
 				{
 					Y[kk][ii] /= fftMax;
 				}
@@ -137,10 +131,11 @@ namespace DigitalMusicAnalysis
 			{
 				Y[0] = x[0];
 			}
-			else{
+			else
+			{
 
-				Complex[] even = new Complex[N/2];
-				Complex[] odd = new Complex[N/2];
+				Complex[] even = new Complex[N / 2];
+				Complex[] odd = new Complex[N / 2];
 
 				for (ii = 0; ii < N; ii++)
 				{
@@ -164,8 +159,8 @@ namespace DigitalMusicAnalysis
 				}
 			}
 
-		   return Y;
+			return Y;
 		}
-		
+
 	}
 }
